@@ -60,6 +60,7 @@ impl Shell {
                     println!("  hello    - Print a greeting");
                     println!("  car      - Print a car");
                     println!("  about    - About this OS");
+                    println!("  bootinfo - Display boot information");
                 }
                 "car" => {
                     println!(r"      /\_/\  ");
@@ -80,6 +81,14 @@ impl Shell {
                     println!("CarlOS v0.1.0");
                     println!("A simple operating system written in Rust");
                     println!("Running on x86_64 architecture");
+                }
+                "bootinfo" => {
+                    if let Some(boot_info) = crate::get_boot_info() {
+                        println!("Boot Information:");
+                        println!("{:#?}", boot_info);
+                    } else {
+                        println!("Boot information not available");
+                    }
                 }
                 "" => {},
                 _ => {

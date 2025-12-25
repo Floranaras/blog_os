@@ -52,10 +52,23 @@ CarlOS is a bare-metal operating system kernel that demonstrates fundamental OS 
 
 ## Building
 
-Install the required Rust toolchain:
+Install the required dependencies:
 
 ```bash
 rustup override set nightly
+
+rustup component add rust-src llvm-tools-preview
+
+cargo install bootimage
+
+#Ubuntu/Debian: 
+sudo apt install qemu-system-x86
+
+#Arch Linux: 
+sudo pacman -S qemu-desktop
+
+#Fedora: 
+sudo dnf install qemu-system-x86
 ```
 
 Build the kernel:

@@ -11,12 +11,12 @@ mod serial;
 mod interrupts;
 mod pic;
 mod shell;
+mod basic;
 
 lazy_static! {
     pub static ref SHELL: Mutex<shell::Shell> = Mutex::new(shell::Shell::new());
+    pub static ref BASIC: Mutex<basic::BasicInterpreter> = Mutex::new(basic::BasicInterpreter::new());
 }
-
-static mut BOOT_INFO: Option<&'static bootloader::BootInfo> = None;
 
 fn print_logo() {
     println!(r"      /\_/\  ");
@@ -27,14 +27,8 @@ fn print_logo() {
     println!();
 }
 
-pub fn get_boot_info() -> Option<&'static bootloader::BootInfo> {
-    unsafe { BOOT_INFO }
-}
-
 #[no_mangle]
-pub extern "C" fn _start(boot_info: &'static bootloader::BootInfo) -> ! {
-    unsafe { BOOT_INFO = Some(boot_info); }
-    
+pub extern "C" fn _start() -> ! {
     vga_buffer::clear_screen();
     
     print_logo();
@@ -49,8 +43,9 @@ pub extern "C" fn _start(boot_info: &'static bootloader::BootInfo) -> ! {
     println!("  OS:        CarlOS x86_64");
     println!("  Kernel:    Rust Kernel v0.1.0");
     println!("  Shell:     carlsh");
+    println!("  BASIC:     Apple BASIC clone");
     println!();
-    println!("Type 'help' for available commands");
+    println!("Type 'help' for commands or 'basic' for BASIC mode");
     println!();
 
     interrupts::init_idt();

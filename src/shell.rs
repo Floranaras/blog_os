@@ -5,6 +5,7 @@ const MAX_BUFFER_LEN: usize = 128;
 pub struct Shell {
     buffer: [u8; MAX_BUFFER_LEN],
     len: usize,
+    basic_mode: bool,
 }
 
 impl Shell {
@@ -12,6 +13,7 @@ impl Shell {
         Shell {
             buffer: [0; MAX_BUFFER_LEN],
             len: 0,
+            basic_mode: false,
         }
     }
 
@@ -21,9 +23,14 @@ impl Shell {
                 println!();
                 self.execute_command();
                 self.len = 0;
-                print!("> ");
+                if !self.basic_mode {
+                    print!("> ");
+                } else {
+                    print!("BASIC> ");
+                }
             }
-            '\u{0008}' => { // Backspace
+            '\u{0008}' => {
+                // Backspace
                 if self.len > 0 {
                     self.len -= 1;
                     print!("\u{0008} \u{0008}");
@@ -47,7 +54,17 @@ impl Shell {
         let cmd = core::str::from_utf8(&self.buffer[..self.len]).unwrap_or("");
         let cmd = cmd.trim();
 
-        // Simple command parsing
+        if self.basic_mode {
+            let cmd_upper = self.to_upper_bytes(cmd);
+            if self.bytes_eq(&cmd_upper, b"EXIT") {
+                self.basic_mode = false;
+                println!("Exiting BASIC mode");
+            } else {
+                crate::BASIC.lock().execute(cmd);
+            }
+            return;
+        }
+
         if cmd.starts_with("echo ") {
             println!("{}", &cmd[5..]);
         } else {
@@ -57,10 +74,16 @@ impl Shell {
                     println!("  help     - Show this help message");
                     println!("  echo     - Echo back the arguments");
                     println!("  clear    - Clear the screen");
+                    println!("  car      - Prints a car");
                     println!("  hello    - Print a greeting");
-                    println!("  car      - Print a car");
                     println!("  about    - About this OS");
-                    println!("  bootinfo - Display boot information");
+                    println!("  basic    - Enter BASIC programming mode");
+                }
+                "clear" => {
+                    crate::vga_buffer::clear_screen();
+                }
+                "hello" => {
+                    println!("Hello from CarlOS!");
                 }
                 "car" => {
                     println!(r"      /\_/\  ");
@@ -70,35 +93,60 @@ impl Shell {
                     println!(r"    (_|   |_)");
                     println!();
                 }
-
-                "clear" => {
-                    crate::vga_buffer::clear_screen();
-                }
-                "hello" => {
-                    println!("Greetings!");
-                }
                 "about" => {
                     println!("CarlOS v0.1.0");
                     println!("A simple operating system written in Rust");
                     println!("Running on x86_64 architecture");
                 }
-                "bootinfo" => {
-                    if let Some(boot_info) = crate::get_boot_info() {
-                        println!("Boot Information:");
-                        println!("{:#?}", boot_info);
-                    } else {
-                        println!("Boot information not available");
-                    }
+                "basic" => {
+                    self.basic_mode = true;
+                    println!("Entering BASIC mode (type EXIT to return to shell)");
+                    println!("Commands: LIST, RUN, NEW, SAVE, LOAD, DIR");
                 }
-                "" => {},
+                "" => {}
                 _ => {
-                    println!("Unknown command: '{}'. Type 'help' for available commands.", cmd);
+                    println!(
+                        "Unknown command: '{}'. Type 'help' for available commands.",
+                        cmd
+                    );
                 }
             }
         }
     }
 
     pub fn print_prompt(&self) {
-        print!("> ");
+        if self.basic_mode {
+            print!("BASIC> ");
+        } else {
+            print!("> ");
+        }
+    }
+
+    fn to_upper_bytes(&self, s: &str) -> [u8; MAX_BUFFER_LEN] {
+        let mut result = [0u8; MAX_BUFFER_LEN];
+        let bytes = s.as_bytes();
+        let len = bytes.len().min(MAX_BUFFER_LEN);
+
+        for i in 0..len {
+            result[i] = if bytes[i] >= b'a' && bytes[i] <= b'z' {
+                bytes[i] - 32
+            } else {
+                    bytes[i]
+                };
+        }
+        result
+    }
+
+    fn bytes_eq(&self, a: &[u8], b: &[u8]) -> bool {
+        let len = b.len();
+        if a.len() < len {
+            return false;
+        }
+        for i in 0..len {
+            if a[i] != b[i] {
+                return false;
+            }
+        }
+        a[len] == 0 || a[len] == b' '
     }
 }

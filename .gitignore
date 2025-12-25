@@ -1,24 +1,29 @@
-# Rust build artifacts
+# Rust
 /target/
 Cargo.lock
 
-# Bootimage artifacts
+# Build artifacts
+*.o
+*.a
+*.so
+*.rlib
 *.bin
+*.iso
+*.img
 
-# IDE files
+# Bootimage
+/bootimage/
+
+# IDE
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
-
-# OS files
 .DS_Store
-Thumbs.db
 
-# Backup files
+# Debug
+*.pdb
+
+# Generated
 *.bak
-*.orig
-
-# Log files
-*.log

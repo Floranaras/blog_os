@@ -261,7 +261,13 @@ impl BasicInterpreter {
         let upper = Self::to_upper_simple(stmt);
 
         if upper.starts_with(b"PRINT ") {
-            self.cmd_print(&stmt[6..]);
+            let expr = &stmt[6..];
+            // Check if it ends with semicolon (no newline)
+            if expr.trim_end().ends_with(';') {
+                self.cmd_print_no_newline(&expr[..expr.trim_end().len() - 1]);
+            } else {
+                self.cmd_print(expr);
+            }
         } else if upper.starts_with(b"LET ") {
             self.cmd_let(&stmt[4..]);
         } else if upper.starts_with(b"GOTO ") {
@@ -295,6 +301,23 @@ impl BasicInterpreter {
             // Try to evaluate expression
             if let Some(result) = self.evaluate(expr) {
                 println!("{}", result);
+            }
+        }
+    }
+
+    fn cmd_print_no_newline(&self, expr: &str) {
+        let expr = expr.trim();
+        
+        if expr.starts_with('"') && expr.ends_with('"') {
+            print!("{} ", &expr[1..expr.len() - 1]);
+        } else if let Some(var_idx) = self.get_var_index(expr) {
+            print!("{} ", self.variables[var_idx]);
+        } else if let Ok(num) = expr.parse::<i32>() {
+            print!("{} ", num);
+        } else {
+            // Try to evaluate expression
+            if let Some(result) = self.evaluate(expr) {
+                print!("{} ", result);
             }
         }
     }

@@ -23,4 +23,4 @@ panic = "abort"
 panic = "abort"
 
 [package.metadata.bootimage]
-run-args = ["-display", "gtk,zoom-to-fit=on"]
+run-args = []

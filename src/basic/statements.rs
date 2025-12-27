@@ -1,3 +1,5 @@
+// statements.rs - Programming statements with INKEY(), SLEEP, and string support
+
 use crate::{print, println};
 use super::parser::{self, ByteArrayHelper};
 use super::evaluator;
@@ -9,11 +11,20 @@ pub fn cmd_print(
     variables: &[i32; 26],
     arrays: &[[i32; MAX_ARRAY_SIZE]; MAX_ARRAYS],
     array_dims: &[usize; MAX_ARRAYS],
+    strings: &[[u8; 80]; 26],
+    string_lens: &[usize; 26],
 ) {
     let expr = expr.trim();
     
+    // String literal
     if expr.starts_with('"') && expr.ends_with('"') {
         println!("{}", &expr[1..expr.len() - 1]);
+    // String variable (S$, T$, etc - represented as A$-Z$)
+    } else if expr.ends_with('$') && expr.len() == 2 {
+        if let Some(str_idx) = parser::var_index(&expr[..1]) {
+            let s = core::str::from_utf8(&strings[str_idx][..string_lens[str_idx]]).unwrap_or("");
+            println!("{}", s);
+        }
     } else if expr.contains('(') && expr.contains(')') {
         if let Some((array_idx, elem_idx)) = arrays::parse_array_access(expr, variables, arrays, array_dims) {
             println!("{}", arrays[array_idx][elem_idx]);
@@ -34,11 +45,18 @@ pub fn cmd_print_no_newline(
     variables: &[i32; 26],
     arrays: &[[i32; MAX_ARRAY_SIZE]; MAX_ARRAYS],
     array_dims: &[usize; MAX_ARRAYS],
+    strings: &[[u8; 80]; 26],
+    string_lens: &[usize; 26],
 ) {
     let expr = expr.trim();
     
     if expr.starts_with('"') && expr.ends_with('"') {
         print!("{} ", &expr[1..expr.len() - 1]);
+    } else if expr.ends_with('$') && expr.len() == 2 {
+        if let Some(str_idx) = parser::var_index(&expr[..1]) {
+            let s = core::str::from_utf8(&strings[str_idx][..string_lens[str_idx]]).unwrap_or("");
+            print!("{} ", s);
+        }
     } else if expr.contains('(') && expr.contains(')') {
         if let Some((array_idx, elem_idx)) = arrays::parse_array_access(expr, variables, arrays, array_dims) {
             print!("{} ", arrays[array_idx][elem_idx]);
@@ -59,17 +77,32 @@ pub fn cmd_let(
     variables: &mut [i32; 26],
     arrays: &mut [[i32; MAX_ARRAY_SIZE]; MAX_ARRAYS],
     array_dims: &[usize; MAX_ARRAYS],
+    strings: &mut [[u8; 80]; 26],
+    string_lens: &mut [usize; 26],
 ) {
     if let Some(eq_pos) = expr.find('=') {
         let var = expr[..eq_pos].trim();
         let value_expr = expr[eq_pos + 1..].trim();
 
-        if var.contains('(') && var.contains(')') {
+        // String variable assignment: LET A$ = "HELLO"
+        if var.ends_with('$') && var.len() == 2 {
+            if let Some(str_idx) = parser::var_index(&var[..1]) {
+                if value_expr.starts_with('"') && value_expr.ends_with('"') {
+                    let content = &value_expr[1..value_expr.len() - 1];
+                    let bytes = content.as_bytes();
+                    let len = bytes.len().min(80);
+                    strings[str_idx][..len].copy_from_slice(&bytes[..len]);
+                    string_lens[str_idx] = len;
+                }
+            }
+        // Array assignment
+        } else if var.contains('(') && var.contains(')') {
             if let Some((array_idx, elem_idx)) = arrays::parse_array_access(var, variables, arrays, array_dims) {
                 if let Some(value) = evaluator::evaluate(value_expr, variables, arrays, array_dims) {
                     arrays[array_idx][elem_idx] = value;
                 }
             }
+        // Regular variable
         } else if let Some(var_idx) = parser::var_index(var) {
             if let Some(value) = evaluator::evaluate(value_expr, variables, arrays, array_dims) {
                 variables[var_idx] = value;
@@ -94,6 +127,8 @@ pub fn cmd_if(
     variables: &mut [i32; 26],
     arrays: &mut [[i32; MAX_ARRAY_SIZE]; MAX_ARRAYS],
     array_dims: &mut [usize; MAX_ARRAYS],
+    strings: &mut [[u8; 80]; 26],
+    string_lens: &mut [usize; 26],
     program: &Program,
     pc: &mut usize,
     running: &mut bool,
@@ -111,6 +146,8 @@ pub fn cmd_if(
                 variables,
                 arrays,
                 array_dims,
+                strings,
+                string_lens,
                 program,
                 pc,
                 running,
@@ -177,11 +214,31 @@ pub fn cmd_input(var: &str, variables: &mut [i32; 26]) {
     }
 }
 
+pub fn cmd_inkey() -> i32 {
+    // Read from keyboard buffer
+    crate::keyboard_buffer::get_key()
+}
+
+pub fn cmd_sleep(ms: i32) {
+    // Simple busy-wait delay
+    // In a real implementation, you'd use a timer interrupt
+    let loops = ms * 10000; // Rough approximation
+    for _ in 0..loops {
+        // Busy wait - use a dummy volatile read
+        unsafe { 
+            let dummy: u32 = 0;
+            core::ptr::read_volatile(&dummy);
+        }
+    }
+}
+
 pub fn execute_statement(
     stmt: &str,
     variables: &mut [i32; 26],
     arrays: &mut [[i32; MAX_ARRAY_SIZE]; MAX_ARRAYS],
     array_dims: &mut [usize; MAX_ARRAYS],
+    strings: &mut [[u8; 80]; 26],
+    string_lens: &mut [usize; 26],
     program: &Program,
     pc: &mut usize,
     running: &mut bool,
@@ -194,24 +251,30 @@ pub fn execute_statement(
     if upper.starts_with(b"PRINT ") {
         let expr = &stmt[6..];
         if expr.trim_end().ends_with(';') {
-            cmd_print_no_newline(&expr[..expr.trim_end().len() - 1], variables, arrays, array_dims);
+            cmd_print_no_newline(&expr[..expr.trim_end().len() - 1], variables, arrays, array_dims, strings, string_lens);
         } else {
-            cmd_print(expr, variables, arrays, array_dims);
+            cmd_print(expr, variables, arrays, array_dims, strings, string_lens);
         }
     } else if upper.starts_with(b"DIM ") {
         arrays::cmd_dim(&stmt[4..], array_dims);
     } else if upper.starts_with(b"LET ") {
-        cmd_let(&stmt[4..], variables, arrays, array_dims);
+        cmd_let(&stmt[4..], variables, arrays, array_dims, strings, string_lens);
     } else if upper.starts_with(b"GOTO ") {
         cmd_goto(&stmt[5..], program, pc);
     } else if upper.starts_with(b"IF ") {
-        cmd_if(&stmt[3..], variables, arrays, array_dims, program, pc, running, for_stack, for_stack_ptr);
+        cmd_if(&stmt[3..], variables, arrays, array_dims, strings, string_lens, program, pc, running, for_stack, for_stack_ptr);
     } else if upper.starts_with(b"FOR ") {
         cmd_for(&stmt[4..], variables, *pc, for_stack, for_stack_ptr);
     } else if upper.starts_with(b"NEXT") {
         cmd_next(variables, pc, for_stack, for_stack_ptr);
     } else if upper.starts_with(b"INPUT ") {
         cmd_input(&stmt[6..], variables);
+    } else if upper.starts_with(b"SLEEP ") {
+        if let Ok(ms) = stmt[6..].trim().parse::<i32>() {
+            cmd_sleep(ms);
+        }
+    } else if upper.starts_with(b"CLS") {
+        super::commands::cls();
     } else if upper.starts_with(b"END") {
         *running = false;
     } else if upper.starts_with(b"STOP") {

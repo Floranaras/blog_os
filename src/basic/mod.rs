@@ -1,3 +1,5 @@
+// mod.rs - BASIC interpreter module entry point
+
 mod types;
 mod parser;
 mod evaluator;

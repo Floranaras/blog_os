@@ -38,7 +38,7 @@ extern "x86-interrupt" fn timer_interrupt_handler(
 extern "x86-interrupt" fn keyboard_interrupt_handler(
     _stack_frame: InterruptStackFrame)
 {
-    use pc_keyboard::{layouts, DecodedKey, HandleControl, Keyboard, ScancodeSet1};
+    use pc_keyboard::{layouts, DecodedKey, HandleControl, Keyboard, ScancodeSet1, KeyCode};
     use x86_64::instructions::port::Port;
 
     lazy_static! {
@@ -58,9 +58,23 @@ extern "x86-interrupt" fn keyboard_interrupt_handler(
         if let Some(key) = keyboard.process_keyevent(key_event) {
             match key {
                 DecodedKey::Unicode(character) => {
+                    // Add to keyboard buffer for INKEY()
+                    crate::keyboard_buffer::KEYBOARD_BUFFER.lock().push(character as u8);
+                    
+                    // Also send to shell
                     crate::SHELL.lock().handle_key(character);
                 }
-                DecodedKey::RawKey(_key) => {}
+                DecodedKey::RawKey(keycode) => {
+                    match keycode {
+                        KeyCode::ArrowUp => {
+                            crate::vga_buffer::scroll_up(1);
+                        }
+                        KeyCode::ArrowDown => {
+                            crate::vga_buffer::scroll_down(1);
+                        }
+                        _ => {}
+                    }
+                }
             }
         }
     }

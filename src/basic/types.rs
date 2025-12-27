@@ -1,3 +1,5 @@
+// types.rs - Core data structures and constants
+
 pub const MAX_LINES: usize = 256;
 pub const MAX_LINE_LEN: usize = 80;
 pub const MAX_PROGRAMS: usize = 8;

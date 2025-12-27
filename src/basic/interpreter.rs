@@ -1,3 +1,5 @@
+// interpreter.rs - Main BASIC interpreter with full Snake game support
+
 use crate::println;
 use super::{types::*, parser, commands, arrays, statements};
 
@@ -8,6 +10,8 @@ pub struct BasicInterpreter {
     variables: [i32; 26],
     arrays: [[i32; MAX_ARRAY_SIZE]; MAX_ARRAYS],
     array_dims: [usize; MAX_ARRAYS],
+    strings: [[u8; 80]; 26], // String variables A$-Z$
+    string_lens: [usize; 26],
     pc: usize,
     running: bool,
     for_stack: [(usize, usize, i32); 8],
@@ -24,6 +28,8 @@ impl BasicInterpreter {
             variables: [0; 26],
             arrays: [[0; MAX_ARRAY_SIZE]; MAX_ARRAYS],
             array_dims: [0; MAX_ARRAYS],
+            strings: [[0; 80]; 26],
+            string_lens: [0; 26],
             pc: 0,
             running: false,
             for_stack: [(0, 0, 0); 8],
@@ -77,6 +83,8 @@ impl BasicInterpreter {
             }
         } else if cmd_upper.starts_with(b"DIM ") {
             arrays::cmd_dim(&cmd[4..], &mut self.array_dims);
+        } else if cmd_upper.starts_with(b"CLS") {
+            commands::cls();
         } else if cmd_upper.starts_with(b"EXIT") {
             println!("Exiting BASIC mode");
         } else {
@@ -85,6 +93,8 @@ impl BasicInterpreter {
                 &mut self.variables,
                 &mut self.arrays,
                 &mut self.array_dims,
+                &mut self.strings,
+                &mut self.string_lens,
                 &self.program,
                 &mut self.pc,
                 &mut self.running,
@@ -105,7 +115,7 @@ impl BasicInterpreter {
             if self.instruction_count >= MAX_INSTRUCTIONS {
                 println!("");
                 println!("ERROR: Program stopped - too many instructions (possible infinite loop)");
-                println!("Executed {} instructions. Press Ctrl+C or use STOP command to abort.", MAX_INSTRUCTIONS);
+                println!("Executed {} instructions.", MAX_INSTRUCTIONS);
                 self.running = false;
                 break;
             }
@@ -120,6 +130,8 @@ impl BasicInterpreter {
                 &mut self.variables,
                 &mut self.arrays,
                 &mut self.array_dims,
+                &mut self.strings,
+                &mut self.string_lens,
                 &self.program,
                 &mut self.pc,
                 &mut self.running,
@@ -137,6 +149,8 @@ impl BasicInterpreter {
         self.variables = [0; 26];
         self.arrays = [[0; MAX_ARRAY_SIZE]; MAX_ARRAYS];
         self.array_dims = [0; MAX_ARRAYS];
+        self.strings = [[0; 80]; 26];
+        self.string_lens = [0; 26];
         println!("Program cleared");
     }
 }

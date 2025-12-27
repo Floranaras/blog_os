@@ -42,6 +42,7 @@ struct ScreenChar {
 
 const BUFFER_HEIGHT: usize = 25;
 const BUFFER_WIDTH: usize = 80;
+const SCROLLBACK_SIZE: usize = 1000;
 
 #[repr(transparent)]
 struct Buffer {
@@ -52,13 +53,23 @@ pub struct Writer {
     column_position: usize,
     color_code: ColorCode,
     buffer: &'static mut Buffer,
+    scrollback: [[ScreenChar; BUFFER_WIDTH]; SCROLLBACK_SIZE],
+    scrollback_position: usize,
+    scroll_offset: usize,
+    live_screen: [[ScreenChar; BUFFER_WIDTH]; BUFFER_HEIGHT], // Save current screen
 }
 
 impl Writer {
     pub fn write_byte(&mut self, byte: u8) {
+        // Auto-scroll to bottom if user types while scrolled
+        if self.scroll_offset > 0 {
+            self.scroll_offset = 0;
+            self.restore_from_live_screen();
+        }
+        
         match byte {
             b'\n' => self.new_line(),
-            0x08 => self.backspace(), // Handle backspace
+            0x08 => self.backspace(),
             byte => {
                 if self.column_position >= BUFFER_WIDTH {
                     self.new_line();
@@ -74,6 +85,12 @@ impl Writer {
                 });
                 self.column_position += 1;
                 self.set_cursor_position(row, self.column_position);
+                
+                // Update live screen cache
+                self.live_screen[row][col] = ScreenChar {
+                    ascii_character: byte,
+                    color_code,
+                };
             }
         }
     }
@@ -111,22 +128,40 @@ impl Writer {
             self.column_position -= 1;
             let row = BUFFER_HEIGHT - 1;
             let col = self.column_position;
-            self.buffer.chars[row][col].write(ScreenChar {
+            let blank = ScreenChar {
                 ascii_character: b' ',
                 color_code: self.color_code,
-            });
+            };
+            self.buffer.chars[row][col].write(blank);
+            self.live_screen[row][col] = blank;
         }
     }
 
     fn new_line(&mut self) {
+        // Save top line to scrollback before it gets lost
+        self.save_line_to_scrollback(0);
+        
+        // Scroll the buffer
         for row in 1..BUFFER_HEIGHT {
             for col in 0..BUFFER_WIDTH {
                 let character = self.buffer.chars[row][col].read();
                 self.buffer.chars[row - 1][col].write(character);
+                self.live_screen[row - 1][col] = character;
             }
         }
+        
+        // Clear last row
         self.clear_row(BUFFER_HEIGHT - 1);
         self.column_position = 0;
+        self.scroll_offset = 0;
+    }
+
+    fn save_line_to_scrollback(&mut self, row: usize) {
+        let pos = self.scrollback_position % SCROLLBACK_SIZE;
+        for col in 0..BUFFER_WIDTH {
+            self.scrollback[pos][col] = self.buffer.chars[row][col].read();
+        }
+        self.scrollback_position += 1;
     }
 
     fn clear_row(&mut self, row: usize) {
@@ -136,6 +171,7 @@ impl Writer {
         };
         for col in 0..BUFFER_WIDTH {
             self.buffer.chars[row][col].write(blank);
+            self.live_screen[row][col] = blank;
         }
     }
 
@@ -144,6 +180,61 @@ impl Writer {
             self.clear_row(row);
         }
         self.column_position = 0;
+        self.scroll_offset = 0;
+    }
+
+    pub fn scroll_up(&mut self, lines: usize) {
+        // Can scroll up through scrollback_position lines
+        let max = self.scrollback_position;
+        if self.scroll_offset < max {
+            self.scroll_offset = (self.scroll_offset + lines).min(max);
+            self.redraw_from_scrollback();
+        }
+    }
+
+    pub fn scroll_down(&mut self, lines: usize) {
+        if self.scroll_offset > 0 {
+            self.scroll_offset = self.scroll_offset.saturating_sub(lines);
+            
+            if self.scroll_offset == 0 {
+                // Back to live view
+                self.restore_from_live_screen();
+            } else {
+                self.redraw_from_scrollback();
+            }
+        }
+    }
+
+    fn redraw_from_scrollback(&mut self) {
+        // Show lines starting from (scrollback_position - scroll_offset - BUFFER_HEIGHT)
+        let total = self.scrollback_position;
+        let start = if total >= self.scroll_offset + BUFFER_HEIGHT {
+            total - self.scroll_offset - BUFFER_HEIGHT
+        } else {
+            0
+        };
+        
+        for screen_row in 0..BUFFER_HEIGHT {
+            let sb_line = start + screen_row;
+            
+            if sb_line < total {
+                let sb_idx = sb_line % SCROLLBACK_SIZE;
+                for col in 0..BUFFER_WIDTH {
+                    self.buffer.chars[screen_row][col].write(self.scrollback[sb_idx][col]);
+                }
+            } else {
+                self.clear_row(screen_row);
+            }
+        }
+    }
+
+    fn restore_from_live_screen(&mut self) {
+        // Restore the live screen from cache
+        for row in 0..BUFFER_HEIGHT {
+            for col in 0..BUFFER_WIDTH {
+                self.buffer.chars[row][col].write(self.live_screen[row][col]);
+            }
+        }
     }
 }
 
@@ -162,11 +253,29 @@ lazy_static! {
         column_position: 0,
         color_code: ColorCode::new(Color::Green, Color::Black),
         buffer: unsafe { &mut *(0xb8000 as *mut Buffer) },
+        scrollback: [[ScreenChar {
+            ascii_character: b' ',
+            color_code: ColorCode::new(Color::Green, Color::Black),
+        }; BUFFER_WIDTH]; SCROLLBACK_SIZE],
+        scrollback_position: 0,
+        scroll_offset: 0,
+        live_screen: [[ScreenChar {
+            ascii_character: b' ',
+            color_code: ColorCode::new(Color::Green, Color::Black),
+        }; BUFFER_WIDTH]; BUFFER_HEIGHT],
     });
 }
 
 pub fn clear_screen() {
     WRITER.lock().clear();
+}
+
+pub fn scroll_up(lines: usize) {
+    WRITER.lock().scroll_up(lines);
+}
+
+pub fn scroll_down(lines: usize) {
+    WRITER.lock().scroll_down(lines);
 }
 
 #[macro_export]
@@ -185,5 +294,3 @@ pub fn _print(args: fmt::Arguments) {
     use core::fmt::Write;
     WRITER.lock().write_fmt(args).unwrap();
 }
-
-

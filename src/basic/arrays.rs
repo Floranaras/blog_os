@@ -1,3 +1,5 @@
+// arrays.rs - Array operations (DIM, array access)
+
 use crate::println;
 use super::parser;
 use super::evaluator;
@@ -13,6 +15,7 @@ pub fn cmd_dim(expr: &str, array_dims: &mut [usize; MAX_ARRAYS]) {
                 if let Ok(size) = size_str.parse::<usize>() {
                     if size > 0 && size <= MAX_ARRAY_SIZE {
                         array_dims[array_idx] = size;
+                        println!("Array {} dimensioned with {} elements", array_name, size);
                     } else {
                         println!("Array size must be 1-{}", MAX_ARRAY_SIZE);
                     }

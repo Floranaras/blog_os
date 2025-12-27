@@ -1,3 +1,5 @@
+// parser.rs - Parsing utilities
+
 pub fn to_upper(s: &str) -> [u8; 128] {
     let mut result = [0u8; 128];
     let bytes = s.as_bytes();

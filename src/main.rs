@@ -13,6 +13,8 @@ mod pic;
 mod shell;
 mod basic;
 
+pub mod keyboard_buffer;
+
 lazy_static! {
     pub static ref SHELL: Mutex<shell::Shell> = Mutex::new(shell::Shell::new());
     pub static ref BASIC: Mutex<basic::BasicInterpreter> = Mutex::new(basic::BasicInterpreter::new());

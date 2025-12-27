@@ -1,5 +1,17 @@
+// evaluator.rs - Expression and condition evaluation with RND()
+
 use super::parser;
 use super::types::{MAX_ARRAY_SIZE, MAX_ARRAYS};
+
+// Simple LCG random number generator
+static mut RNG_STATE: u32 = 12345;
+
+pub fn rnd(max: i32) -> i32 {
+    unsafe {
+        RNG_STATE = RNG_STATE.wrapping_mul(1103515245).wrapping_add(12345);
+        ((RNG_STATE / 65536) % (max as u32)) as i32
+    }
+}
 
 pub fn evaluate(
     expr: &str,
@@ -8,6 +20,22 @@ pub fn evaluate(
     array_dims: &[usize; MAX_ARRAYS],
 ) -> Option<i32> {
     let expr = expr.trim();
+
+    // Check for INKEY() function
+    if expr == "INKEY()" {
+        return Some(super::statements::cmd_inkey());
+    }
+
+    // Check for RND(n) function
+    if expr.starts_with("RND(") && expr.ends_with(')') {
+        let arg = &expr[4..expr.len() - 1];
+        if let Some(n) = evaluate(arg, variables, arrays, array_dims) {
+            if n > 0 {
+                return Some(rnd(n));
+            }
+        }
+        return Some(0);
+    }
 
     // Array access
     if expr.contains('(') && expr.contains(')') {
@@ -51,7 +79,8 @@ pub fn evaluate_condition(
     arrays: &[[i32; MAX_ARRAY_SIZE]; MAX_ARRAYS],
     array_dims: &[usize; MAX_ARRAYS],
 ) -> bool {
-    for op in &[">=", "<=", "<>", "=", ">", "<"] {
+    // Support both = and ==
+    for op in &[">=", "<=", "<>", "==", "=", ">", "<"] {
         if let Some(pos) = cond.find(op) {
             let left = evaluate(&cond[..pos], variables, arrays, array_dims).unwrap_or(0);
             let right = evaluate(&cond[pos + op.len()..], variables, arrays, array_dims).unwrap_or(0);
@@ -61,7 +90,7 @@ pub fn evaluate_condition(
                 "<" => left < right,
                 ">=" => left >= right,
                 "<=" => left <= right,
-                "=" => left == right,
+                "=" | "==" => left == right,
                 "<>" => left != right,
                 _ => false,
             };

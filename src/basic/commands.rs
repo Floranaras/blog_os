@@ -1,3 +1,5 @@
+// commands.rs - System commands (LIST, RUN, NEW, SAVE, LOAD, DIR, DELETE, CLS)
+
 use crate::println;
 use super::types::*;
 
@@ -42,6 +44,13 @@ pub fn list(program: &Program) {
     for i in 0..program.line_count {
         let line = &program.lines[i];
         println!("{} {}", line.number, line.as_str());
+    }
+}
+
+pub fn cls() {
+    // Clear screen by printing newlines
+    for _ in 0..25 {
+        println!("");
     }
 }
 

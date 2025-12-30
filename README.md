@@ -6,6 +6,8 @@ A minimal x86_64 operating system kernel written in Rust.
 
 CarlOS is a bare-metal operating system kernel that demonstrates fundamental OS concepts including interrupt handling, keyboard input processing, VGA text mode output, and a basic command-line shell interface.
 
+## Video Demo 
+![Demo](assets/CarlOS-demo.gif)
 ## Features
 
 - Custom x86_64 bare-metal kernel
